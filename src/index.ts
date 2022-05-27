@@ -1,20 +1,26 @@
 import { Server } from 'socket.io';
 
-let clientLatency: Record<string, number> = {};
-
 interface State {
   playing: boolean;
   time: number;
 }
 
+let connections = 0,
+  maxStates = 0;
+let clientLatency: Record<string, number> = {};
+let clientState: Record<string, State> = {};
+
 const io = new Server(3000);
 
 io.on('connection', (socket) => {
   console.log('New connection');
+  connections++;
 
   socket.on('disconnect', () => {
-    delete clientLatency[socket.id];
     console.log('Disconnected');
+    connections--;
+    delete clientLatency[socket.id];
+    delete clientState[socket.id];
   });
 
   socket.on('state', (state: State) => {
@@ -27,11 +33,42 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('state', state);
   });
 
-  socket.on('ping', (start) => {
+  socket.on('ping', (start: number) => {
     clientLatency[socket.id] = (Date.now() - start) / 2;
+  });
+
+  socket.on('sync', (state: State) => {
+    clientState[socket.id] = state;
+
+    if (Object.keys(clientState).length < maxStates) {
+      return;
+    }
+
+    maxStates = Object.keys(clientState).length;
+
+    console.log(clientState);
+
+    let max = state.time;
+    for (const id in clientState) {
+      if (clientState[id].time > max) {
+        max = clientState[id].time;
+      }
+    }
+
+    for (const id in clientState) {
+      if (max - clientState[id].time > 0.5) {
+        console.log('Out of sync');
+        socket.to(id).emit('state', { ...state, time: max });
+      }
+    }
   });
 
   setInterval(() => {
     socket.emit('ping', Date.now());
-  }, 1000);
+  }, 10000);
 });
+
+// setInterval(() => {
+//   clientState = {};
+//   io.emit('sync');
+// }, 1000);
