@@ -13,8 +13,8 @@ let clientState: Record<string, State> = {};
 const io = new Server(3000);
 
 io.on('connection', (socket) => {
-  console.log('New connection');
   connections++;
+  console.log('New connection', connections);
 
   socket.on('disconnect', () => {
     console.log('Disconnected');
@@ -25,7 +25,7 @@ io.on('connection', (socket) => {
 
   socket.on('state', (state: State) => {
     if (state.playing) {
-      state.time += clientLatency[socket.id] / 1000;
+      state.time += (clientLatency[socket.id] ?? 0) / 1000;
     }
 
     console.log('New report: playing:', state.playing, 'time:', state.time);
