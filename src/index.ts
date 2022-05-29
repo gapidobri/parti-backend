@@ -6,22 +6,41 @@ interface PlaybackState {
   time: number;
 }
 
-let connections = 0;
+interface Event {
+  name: string;
+  data: any;
+}
 
 const io = new Server(3000);
 
 io.on('connection', (socket) => {
-  connections++;
-  console.log('New connection', connections);
+  let roomName: string | null = null;
+
+  console.log('New connection', socket.id);
 
   socket.on('disconnect', () => {
-    console.log('Disconnected');
-    connections--;
+    console.log('Disconnected', socket.id);
   });
 
   socket.on('state', (state: PlaybackState) => {
     console.log(state);
 
-    socket.broadcast.emit('state', state);
+    if (roomName) {
+      socket.to(roomName).emit('state', state);
+    } else {
+      socket.broadcast.emit('state', state);
+    }
+  });
+
+  socket.on('joinroom', (event: Event) => {
+    console.log('Join room', event.name);
+    roomName = event.name;
+    socket.join(event.name);
+  });
+
+  socket.on('leaveroom', (event: Event) => {
+    console.log('Leave room', event.name);
+    roomName = null;
+    socket.leave(event.name);
   });
 });
