@@ -6,15 +6,17 @@ interface PlaybackState {
   time: number;
 }
 
-interface Event {
-  name: string;
-  data: any;
+interface Event<T> {
+  room: string;
+  data: T;
 }
+
+let roomStates: Record<string, PlaybackState> = {};
 
 const io = new Server(3000);
 
 io.on('connection', (socket) => {
-  let roomName: string | null = null;
+  const rooms = new Set<string>([]);
 
   console.log('New connection', socket.id);
 
@@ -22,25 +24,42 @@ io.on('connection', (socket) => {
     console.log('Disconnected', socket.id);
   });
 
-  socket.on('state', (state: PlaybackState) => {
-    console.log(state);
+  socket.on('state', (event: Event<PlaybackState>) => {
+    console.log(event);
 
-    if (roomName) {
-      socket.to(roomName).emit('state', state);
-    } else {
-      socket.broadcast.emit('state', state);
+    if (event.room) {
+      roomStates[event.room] = event.data;
+      console.log(roomStates);
+    }
+
+    if (rooms.has(event.room)) {
+      socket.to(event.room).emit('state', event);
     }
   });
 
-  socket.on('joinroom', (event: Event) => {
-    console.log('Join room', event.name);
-    roomName = event.name;
-    socket.join(event.name);
+  socket.on('joinroom', (roomName: string) => {
+    console.log('Join room', roomName);
+
+    socket.join(roomName);
+
+    rooms.add(roomName);
+
+    console.log(roomStates);
+
+    if (roomStates[roomName]) {
+      console.log('Sending current state');
+      socket.emit('state', {
+        room: roomName,
+        data: roomStates[roomName],
+      });
+    } else {
+      console.log('State not found');
+    }
   });
 
-  socket.on('leaveroom', (event: Event) => {
-    console.log('Leave room', event.name);
-    roomName = null;
-    socket.leave(event.name);
+  socket.on('leaveroom', (roomName: string) => {
+    console.log('Leave room', roomName);
+    rooms.delete(roomName);
+    socket.leave(roomName);
   });
 });
